@@ -23,12 +23,14 @@ protected:
   size_t sz;
   T* pMem;
 public:
-  TDynamicVector(size_t size = 1) : sz(size)
-  {
-    if (sz == 0)
-      throw out_of_range("Vector size should be greater than zero");
-    pMem = new T[sz]();// {}; // У типа T д.б. констуктор по умолчанию
-  }
+    TDynamicVector(size_t size = 1) : sz(size)
+    {
+        if (sz == 0)
+            throw out_of_range("Vector size should be greater than zero");
+        if (sz > MAX_VECTOR_SIZE)
+            throw out_of_range("Vector size should be less than MAX_VECTOR_SIZE");
+        pMem = new T[sz](); // {} // У типа T д.б. констуктор по умолчанию
+    }
   TDynamicVector(T* arr, size_t s) : sz(s)
   {
     assert(arr != nullptr && "TDynamicVector ctor requires non-nullptr arg");
@@ -36,9 +38,11 @@ public:
     std::copy(arr, arr + sz, pMem);
   }
   TDynamicVector(const TDynamicVector& v)
+      : sz(v.sz), pMem(new T[v.sz])
   {
+      std::copy(v.pMem, v.pMem + v.sz, pMem);
   }
-  TDynamicVector(TDynamicVector&& v) sz(v.sz), pMem(v.pMem)
+  TDynamicVector(TDynamicVector&& v) : sz(v.sz), pMem(v.pMem)
   {
       v.sz = 0;
       v.pMem = nullptr;
@@ -46,6 +50,21 @@ public:
   ~TDynamicVector()
   {
       delete[] pMem;
+  }
+  TDynamicVector multiplyElementwise(const TDynamicVector& v)
+  {
+      if (this->sz != v.sz)
+          throw invalid_argument("Vectors should be of the same size for elementwise multiplication");
+
+      TDynamicVector<T> result(this->sz);
+      for (size_t i = 0; i < this->sz; ++i)
+          result[i] = this->pMem[i] * v.pMem[i];
+
+      return result;
+  }
+  size_t GetSize() const
+  {
+      return sz;
   }
   TDynamicVector& operator=(const TDynamicVector& v)
   {
@@ -55,6 +74,8 @@ public:
           sz = v.sz;
           pMem = new T[sz];
           std::copy(v.pMem, v.pMem + sz, pMem);
+      }
+      return *this;
   }
   TDynamicVector& operator=(TDynamicVector&& v) noexcept
   {
@@ -75,10 +96,17 @@ public:
   // индексация
   T& operator[](size_t ind)
   {
+      if (ind >= sz) {
+          throw std::out_of_range("Index is out of range!");
+      }
       return pMem[ind];
   }
+
   const T& operator[](size_t ind) const
   {
+      if (ind >= sz) {
+          throw std::out_of_range("Index is out of range!");
+      }
       return pMem[ind];
   }
   // индексация с контролем
@@ -92,7 +120,7 @@ public:
       if (ind >= sz) throw out_of_range("Index out of range");
       return pMem[ind];
   }
-
+  
   // сравнение
   bool operator==(const TDynamicVector& v) const noexcept
   {
@@ -161,7 +189,7 @@ public:
   T operator*(const TDynamicVector& v) noexcept(noexcept(T()))
   {
       if (this->sz != v.sz)
-          throw invalid_argument("Vectors should be of the same size for dot product!");
+          throw std::invalid_argument("Vectors should be of the same size for dot product!");
 
       T result{};
       for (size_t i = 0; i < this->sz; ++i)
@@ -200,14 +228,52 @@ class TDynamicMatrix : private TDynamicVector<TDynamicVector<T>>
   using TDynamicVector<TDynamicVector<T>>::pMem;
   using TDynamicVector<TDynamicVector<T>>::sz;
 public:
-  TDynamicMatrix(size_t s = 1) : TDynamicVector<TDynamicVector<T>>(s)
+    TDynamicMatrix(int s)
+    {
+        if (s < 0) {
+            throw std::invalid_argument("Matrix size shouldn't be less than zero");
+        }
+        if (s > MAX_MATRIX_SIZE) {
+            throw std::invalid_argument("Matrix size shouldn't be more than MAX_MATRIX_SIZE");
+        }
+        sz = static_cast<size_t>(s);
+        std::unique_ptr<TDynamicVector<T>[]> tempMem = std::make_unique<TDynamicVector<T>[]>(sz);
+        for (size_t i = 0; i < sz; i++)
+            tempMem[i] = TDynamicVector<T>(sz);
+
+        pMem = tempMem.get();
+        tempMem.release();
+    }
+  T& operator()(size_t i, size_t j)
   {
-    for (size_t i = 0; i < sz; i++)
-      pMem[i] = TDynamicVector<T>(sz);
+      if (i >= sz || j >= pMem[i].GetSize())
+          throw std::out_of_range("Index out of range");
+
+      return pMem[i][j];
   }
+  const T& operator()(size_t i, size_t j) const
+  {
+      if (i >= sz || j >= pMem[i].GetSize())
+          throw std::out_of_range("Index out of range");
 
+      return pMem[i][j];
+  }
+  size_t GetRows() const
+  {
+      return this->TDynamicVector<TDynamicVector<T>>::GetSize();
+  }
+  size_t GetCols() const
+  {
+      if (this->TDynamicVector<TDynamicVector<T>>::GetSize() == 0)
+          throw std::logic_error("Cannot get number of columns for an empty matrix");
+
+      return this->TDynamicVector<TDynamicVector<T>>::operator[](0).size();
+  }
   using TDynamicVector<TDynamicVector<T>>::operator[];
-
+  size_t GetSize() const
+  {
+      return sz;
+  }
   // сравнение
   bool operator==(const TDynamicMatrix& m) const noexcept
   {
@@ -220,7 +286,19 @@ public:
 
       return true;
   }
-
+  bool operator!=(const TDynamicMatrix& other) const {
+      if (this->GetRows() != other.GetRows() || this->GetCols() != other.GetCols()) {
+          return true;
+      }
+      for (int i = 0; i < this->GetRows(); i++) {
+          for (int j = 0; j < this->GetCols(); j++) {
+              if ((*this)[i][j] != other[i][j]) {
+                  return true;
+              }
+          }
+      }
+      return false;
+  }
   // матрично-скалярные операции
   TDynamicMatrix operator*(const T& val)
   {
@@ -282,5 +360,4 @@ public:
       return ostr;
   }
 };
-
 #endif
