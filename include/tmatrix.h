@@ -339,10 +339,11 @@ public:
   TDynamicMatrix operator*(const TDynamicMatrix& m)
   {
       if (m.sz != this->sz) throw invalid_argument("Matrix dimensions must match for multiplication!");
-      TDynamicMatrix<T> result(this->sz); 
+      TDynamicMatrix<T> result(this->sz);
+      for (size_t i = 0; i < this->sz; ++i)
           for (size_t j = 0; j < m.sz; ++j)
               for (size_t k = 0; k < this->sz; ++k)
-                  result[i][j] += (*this)[i][k] * m[k][j]; 
+                  result[i][j] += (*this)[i][k] * m[k][j];
       return result;
   }
 
